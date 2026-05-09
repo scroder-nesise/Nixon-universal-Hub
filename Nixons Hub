@@ -1,5 +1,5 @@
 -- ================================================
---       Nixon Studios | Universal Hub  V1.0
+--       Nixon Studios | Universal Hub  V1.1
 --          Built with Rayfield UI Library
 -- ================================================
 
@@ -8,7 +8,7 @@ local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Window = Rayfield:CreateWindow({
     Name           = "Nixon Studios | Universal Hub",
     LoadingTitle   = "Nixon Studios",
-    LoadingSubtitle = "Universal Hub V1.0",
+    LoadingSubtitle = "Universal Hub V1.1",
     ConfigurationSaving = {
         Enabled    = true,
         FolderName = "NixonStudios",
@@ -612,6 +612,639 @@ ServerTab:CreateButton({
         Rayfield:Notify({Title="Server Info", Content=info, Duration=7})
     end,
 })
+
+-- ================================================
+--                  COMBAT TAB
+-- ================================================
+local CombatTab = Window:CreateTab("Combat", "crosshair")
+
+-- ================================================
+--  Shared combat state & helpers
+-- ================================================
+local combatEnabled = {
+    silentAim  = false,
+    aimbot     = false,
+    hitbox     = false,
+}
+
+local aimbotFOV       = 150
+local aimbotSmoothing = 0.15
+local hitboxSize      = 10
+local aimbotConn      = nil
+local originalSizes   = {} -- stores original hitbox sizes
+
+-- Returns the nearest enemy player's HumanoidRootPart within FOV
+local function getNearestTarget()
+    local cam    = workspace.CurrentCamera
+    local origin = cam.CFrame.Position
+    local best, bestDist = nil, math.huge
+
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= lp and p.Character then
+            local root = p.Character:FindFirstChild("HumanoidRootPart")
+            local h    = p.Character:FindFirstChildOfClass("Humanoid")
+            if root and h and h.Health > 0 then
+                -- Check screen FOV
+                local screenPos, onScreen = cam:WorldToViewportPoint(root.Position)
+                if onScreen then
+                    local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
+                    local dist2D = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+                    if dist2D < aimbotFOV and dist2D < bestDist then
+                        bestDist = dist2D
+                        best     = root
+                    end
+                end
+            end
+        end
+    end
+    return best
+end
+
+-- ================================================
+--  Silent Aim
+--  Hooks FindPartOnRayWithIgnoreList / Raycast so
+--  projectiles register on the nearest target.
+-- ================================================
+CombatTab:CreateSection("Silent Aim")
+
+CombatTab:CreateToggle({
+    Name         = "Silent Aim",
+    CurrentValue = false,
+    Flag         = "SilentAim",
+    Callback     = function(val)
+        combatEnabled.silentAim = val
+        if val then
+            -- Hook the camera's CFrame so rays resolve toward target
+            local oldIndex = getrawmetatable(game).__index
+            local oldNamecall = getrawmetatable(game).__namecall
+
+            -- Use gethook/sethook alternative: wrap WorldRoot:Raycast
+            local mt = getrawmetatable(workspace)
+            setreadonly(mt, false)
+            local oldRaycast = mt.__index and mt.__index.Raycast
+            -- Fallback: hook via __namecall
+            local _nc = oldNamecall
+            setrawmetatable(game, getmetatable(game)) -- keep ref
+            rawset(getrawmetatable(game), "__namecall", newcclosure(function(self, ...)
+                local method = getnamecallmethod()
+                local args   = {...}
+                if combatEnabled.silentAim and method == "FindPartOnRayWithIgnoreList" then
+                    local target = getNearestTarget()
+                    if target then
+                        local ray    = args[1]
+                        local newRay = Ray.new(ray.Origin, (target.Position - ray.Origin).Unit * ray.Direction.Magnitude)
+                        args[1]      = newRay
+                    end
+                end
+                return _nc(self, table.unpack(args))
+            end))
+            setreadonly(mt, true)
+            Rayfield:Notify({Title="Combat", Content="Silent Aim ON", Duration=2})
+        else
+            Rayfield:Notify({Title="Combat", Content="Silent Aim OFF", Duration=2})
+        end
+    end,
+})
+
+CombatTab:CreateSlider({
+    Name         = "Silent Aim FOV",
+    Range        = {10, 500},
+    Increment    = 5,
+    Suffix       = "px",
+    CurrentValue = 150,
+    Flag         = "SilentAimFOV",
+    Callback     = function(val) aimbotFOV = val end,
+})
+
+-- ================================================
+--  Aimbot
+--  Smoothly rotates the camera toward the nearest
+--  target each Heartbeat while holding Right Mouse.
+-- ================================================
+CombatTab:CreateSection("Aimbot")
+
+CombatTab:CreateToggle({
+    Name         = "Aimbot",
+    CurrentValue = false,
+    Flag         = "Aimbot",
+    Callback     = function(val)
+        combatEnabled.aimbot = val
+        if val then
+            aimbotConn = RunService.Heartbeat:Connect(function()
+                if not combatEnabled.aimbot then return end
+                -- Only lock while holding Right Mouse Button
+                if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then return end
+                local target = getNearestTarget()
+                if not target then return end
+                local cam    = workspace.CurrentCamera
+                local goal   = CFrame.new(cam.CFrame.Position, target.Position)
+                cam.CFrame   = cam.CFrame:Lerp(goal, aimbotSmoothing)
+            end)
+            Rayfield:Notify({Title="Combat", Content="Aimbot ON  (Hold RMB to lock)", Duration=3})
+        else
+            if aimbotConn then aimbotConn:Disconnect() aimbotConn = nil end
+            Rayfield:Notify({Title="Combat", Content="Aimbot OFF", Duration=2})
+        end
+    end,
+})
+
+CombatTab:CreateSlider({
+    Name         = "Aimbot FOV",
+    Range        = {10, 600},
+    Increment    = 5,
+    Suffix       = "px",
+    CurrentValue = 150,
+    Flag         = "AimbotFOV",
+    Callback     = function(val) aimbotFOV = val end,
+})
+
+CombatTab:CreateSlider({
+    Name         = "Aimbot Smoothing",
+    Range        = {1, 30},
+    Increment    = 1,
+    Suffix       = "",
+    CurrentValue = 5,
+    Flag         = "AimbotSmooth",
+    Callback     = function(val)
+        -- 1 = instant, 30 = very slow
+        aimbotSmoothing = val / 100
+    end,
+})
+
+-- ================================================
+--  Hitbox Expander
+--  Scales every enemy's HumanoidRootPart up so
+--  shots register much more easily.
+-- ================================================
+CombatTab:CreateSection("Hitbox Expander")
+
+local function applyHitboxes(enabled)
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= lp and p.Character then
+            local root = p.Character:FindFirstChild("HumanoidRootPart")
+            if root then
+                if enabled then
+                    -- Save original if not saved yet
+                    if not originalSizes[p.Name] then
+                        originalSizes[p.Name] = root.Size
+                    end
+                    root.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+                else
+                    -- Restore
+                    if originalSizes[p.Name] then
+                        root.Size = originalSizes[p.Name]
+                        originalSizes[p.Name] = nil
+                    end
+                end
+            end
+        end
+    end
+end
+
+CombatTab:CreateToggle({
+    Name         = "Hitbox Expander",
+    CurrentValue = false,
+    Flag         = "HitboxExpander",
+    Callback     = function(val)
+        combatEnabled.hitbox = val
+        applyHitboxes(val)
+        if val then
+            -- Keep applying on new characters
+            Players.PlayerAdded:Connect(function(p)
+                p.CharacterAdded:Connect(function(c)
+                    if not combatEnabled.hitbox then return end
+                    local root = c:WaitForChild("HumanoidRootPart", 5)
+                    if root then
+                        originalSizes[p.Name] = root.Size
+                        root.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+                    end
+                end)
+            end)
+            for _, p in pairs(Players:GetPlayers()) do
+                if p ~= lp then
+                    p.CharacterAdded:Connect(function(c)
+                        if not combatEnabled.hitbox then return end
+                        local root = c:WaitForChild("HumanoidRootPart", 5)
+                        if root then
+                            originalSizes[p.Name] = root.Size
+                            root.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+                        end
+                    end)
+                end
+            end
+            Rayfield:Notify({Title="Combat", Content="Hitbox Expander ON", Duration=2})
+        else
+            applyHitboxes(false)
+            Rayfield:Notify({Title="Combat", Content="Hitbox Expander OFF  (sizes restored)", Duration=2})
+        end
+    end,
+})
+
+CombatTab:CreateSlider({
+    Name         = "Hitbox Size",
+    Range        = {4, 60},
+    Increment    = 1,
+    Suffix       = "studs",
+    CurrentValue = 10,
+    Flag         = "HitboxSize",
+    Callback     = function(val)
+        hitboxSize = val
+        if combatEnabled.hitbox then applyHitboxes(true) end
+    end,
+})
+
+CombatTab:CreateToggle({
+    Name         = "Visualize Hitboxes  (ESP helper)",
+    CurrentValue = false,
+    Flag         = "VisualizeHitbox",
+    Callback     = function(val)
+        for _, p in pairs(Players:GetPlayers()) do
+            if p ~= lp and p.Character then
+                local root = p.Character:FindFirstChild("HumanoidRootPart")
+                if root then
+                    local box = root:FindFirstChild("HitboxVisual")
+                    if val then
+                        if not box then
+                            local s = Instance.new("SelectionBox", root)
+                            s.Name        = "HitboxVisual"
+                            s.Adornee     = root
+                            s.Color3      = Color3.fromRGB(255, 100, 0)
+                            s.LineThickness = 0.05
+                            s.SurfaceTransparency = 0.6
+                        end
+                    else
+                        if box then box:Destroy() end
+                    end
+                end
+            end
+        end
+    end,
+})
+
+-- ================================================
+--  Kill Aura
+--  Repeatedly damages nearby enemies by touching
+--  their HumanoidRootPart with a ghost part.
+-- ================================================
+CombatTab:CreateSection("Kill Aura")
+
+local killAuraConn = nil
+local killAuraRange = 15
+local killAuraCooldown = 0.1
+
+CombatTab:CreateToggle({
+    Name         = "Kill Aura",
+    CurrentValue = false,
+    Flag         = "KillAura",
+    Callback     = function(val)
+        if val then
+            killAuraConn = RunService.Heartbeat:Connect(function()
+                local root = char and char:FindFirstChild("HumanoidRootPart")
+                if not root then return end
+                for _, p in pairs(Players:GetPlayers()) do
+                    if p ~= lp and p.Character then
+                        local tRoot = p.Character:FindFirstChild("HumanoidRootPart")
+                        local tHum  = p.Character:FindFirstChildOfClass("Humanoid")
+                        if tRoot and tHum and tHum.Health > 0 then
+                            local dist = (root.Position - tRoot.Position).Magnitude
+                            if dist <= killAuraRange then
+                                -- Touch-based damage ghost part
+                                local g = Instance.new("Part")
+                                g.Size        = Vector3.new(1, 1, 1)
+                                g.Transparency = 1
+                                g.CanCollide  = false
+                                g.CFrame      = tRoot.CFrame
+                                g.Parent      = workspace
+                                game:GetService("Debris"):AddItem(g, killAuraCooldown)
+                                local weld = Instance.new("WeldConstraint")
+                                weld.Part0 = g
+                                weld.Part1 = tRoot
+                                weld.Parent = g
+                                tHum:TakeDamage(tHum.MaxHealth)
+                            end
+                        end
+                    end
+                end
+            end)
+            Rayfield:Notify({Title="Combat", Content="Kill Aura ON", Duration=2})
+        else
+            if killAuraConn then killAuraConn:Disconnect() killAuraConn = nil end
+            Rayfield:Notify({Title="Combat", Content="Kill Aura OFF", Duration=2})
+        end
+    end,
+})
+
+CombatTab:CreateSlider({
+    Name         = "Kill Aura Range",
+    Range        = {5, 100},
+    Increment    = 1,
+    Suffix       = "studs",
+    CurrentValue = 15,
+    Flag         = "KillAuraRange",
+    Callback     = function(val) killAuraRange = val end,
+})
+
+-- ================================================
+--  Reach Extender
+--  Scales your equipped tool's handle so melee
+--  hits register from much farther away.
+-- ================================================
+CombatTab:CreateSection("Reach Extender")
+
+local reachSize   = 10
+local reachConn   = nil
+local originalReach = {}
+
+local function applyReach(enabled)
+    local tool = char and char:FindFirstChildOfClass("Tool")
+    if not tool then return end
+    local handle = tool:FindFirstChild("Handle")
+    if not handle then return end
+    if enabled then
+        if not originalReach.size then
+            originalReach.size = handle.Size
+        end
+        handle.Size = Vector3.new(reachSize, reachSize, reachSize)
+        handle.Transparency = 0.8
+    else
+        if originalReach.size then
+            handle.Size         = originalReach.size
+            handle.Transparency = 0
+            originalReach.size  = nil
+        end
+    end
+end
+
+CombatTab:CreateToggle({
+    Name         = "Reach Extender",
+    CurrentValue = false,
+    Flag         = "ReachExtender",
+    Callback     = function(val)
+        if val then
+            applyReach(true)
+            -- Re-apply whenever a new tool is equipped
+            reachConn = char.ChildAdded:Connect(function(c)
+                if c:IsA("Tool") then
+                    task.wait(0.1)
+                    applyReach(true)
+                end
+            end)
+            Rayfield:Notify({Title="Combat", Content="Reach Extender ON", Duration=2})
+        else
+            applyReach(false)
+            if reachConn then reachConn:Disconnect() reachConn = nil end
+            Rayfield:Notify({Title="Combat", Content="Reach Extender OFF", Duration=2})
+        end
+    end,
+})
+
+CombatTab:CreateSlider({
+    Name         = "Reach Size",
+    Range        = {5, 80},
+    Increment    = 1,
+    Suffix       = "studs",
+    CurrentValue = 10,
+    Flag         = "ReachSize",
+    Callback     = function(val)
+        reachSize = val
+        if char and char:FindFirstChildOfClass("Tool") then applyReach(true) end
+    end,
+})
+
+-- ================================================
+--  No Knockback
+--  Anchors HumanoidRootPart briefly whenever an
+--  external velocity spike would fling the player.
+-- ================================================
+CombatTab:CreateSection("No Knockback")
+
+local noKBConn = nil
+
+CombatTab:CreateToggle({
+    Name         = "No Knockback",
+    CurrentValue = false,
+    Flag         = "NoKnockback",
+    Callback     = function(val)
+        if val then
+            noKBConn = RunService.Heartbeat:Connect(function()
+                local root = char and char:FindFirstChild("HumanoidRootPart")
+                if root and root.AssemblyLinearVelocity.Magnitude > 50 then
+                    root.AssemblyLinearVelocity = Vector3.zero
+                end
+            end)
+            Rayfield:Notify({Title="Combat", Content="No Knockback ON", Duration=2})
+        else
+            if noKBConn then noKBConn:Disconnect() noKBConn = nil end
+            Rayfield:Notify({Title="Combat", Content="No Knockback OFF", Duration=2})
+        end
+    end,
+})
+
+-- ================================================
+--  Fling Players
+--  Applies a massive BodyVelocity to a target.
+-- ================================================
+CombatTab:CreateSection("Fling Players")
+
+local flingTarget = ""
+local flingPower  = 500
+
+CombatTab:CreateInput({
+    Name             = "Target Player Name",
+    PlaceholderText  = "Enter exact username...",
+    RemoveTextAfterFocusLost = false,
+    Flag             = "FlingTargetInput",
+    Callback         = function(val) flingTarget = val end,
+})
+
+CombatTab:CreateSlider({
+    Name         = "Fling Power",
+    Range        = {100, 5000},
+    Increment    = 100,
+    Suffix       = "force",
+    CurrentValue = 500,
+    Flag         = "FlingPower",
+    Callback     = function(val) flingPower = val end,
+})
+
+CombatTab:CreateButton({
+    Name     = "Fling Target",
+    Callback = function()
+        if flingTarget == "" then
+            Rayfield:Notify({Title="Combat", Content="Enter a player name first!", Duration=2})
+            return
+        end
+        local target = Players:FindFirstChild(flingTarget)
+        if target and target.Character then
+            local tRoot = target.Character:FindFirstChild("HumanoidRootPart")
+            if tRoot then
+                local bv    = Instance.new("BodyVelocity", tRoot)
+                bv.MaxForce = Vector3.new(1,1,1) * 999999
+                bv.Velocity = Vector3.new(
+                    math.random(-flingPower, flingPower),
+                    flingPower,
+                    math.random(-flingPower, flingPower)
+                )
+                game:GetService("Debris"):AddItem(bv, 0.15)
+                Rayfield:Notify({Title="Combat", Content="Flung "..flingTarget.."!", Duration=2})
+            end
+        else
+            Rayfield:Notify({Title="Combat", Content="Player '"..flingTarget.."' not found.", Duration=3})
+        end
+    end,
+})
+
+CombatTab:CreateButton({
+    Name     = "Fling All Players",
+    Callback = function()
+        local count = 0
+        for _, p in pairs(Players:GetPlayers()) do
+            if p ~= lp and p.Character then
+                local tRoot = p.Character:FindFirstChild("HumanoidRootPart")
+                if tRoot then
+                    local bv    = Instance.new("BodyVelocity", tRoot)
+                    bv.MaxForce = Vector3.new(1,1,1) * 999999
+                    bv.Velocity = Vector3.new(
+                        math.random(-flingPower, flingPower),
+                        flingPower,
+                        math.random(-flingPower, flingPower)
+                    )
+                    game:GetService("Debris"):AddItem(bv, 0.15)
+                    count = count + 1
+                end
+            end
+        end
+        Rayfield:Notify({Title="Combat", Content="Flung "..count.." player(s)!", Duration=2})
+    end,
+})
+
+-- ================================================
+--  Anti-Aim
+--  Spins the HumanoidRootPart to confuse enemy
+--  aimbots / make hitboxes harder to predict.
+-- ================================================
+CombatTab:CreateSection("Anti-Aim")
+
+local antiAimConn = nil
+local spinSpeed   = 20
+
+CombatTab:CreateToggle({
+    Name         = "Anti-Aim  (Spin)",
+    CurrentValue = false,
+    Flag         = "AntiAim",
+    Callback     = function(val)
+        if val then
+            antiAimConn = RunService.Heartbeat:Connect(function(dt)
+                local root = char and char:FindFirstChild("HumanoidRootPart")
+                if root then
+                    root.CFrame = root.CFrame * CFrame.Angles(0, math.rad(spinSpeed), 0)
+                end
+            end)
+            Rayfield:Notify({Title="Combat", Content="Anti-Aim ON", Duration=2})
+        else
+            if antiAimConn then antiAimConn:Disconnect() antiAimConn = nil end
+            Rayfield:Notify({Title="Combat", Content="Anti-Aim OFF", Duration=2})
+        end
+    end,
+})
+
+CombatTab:CreateSlider({
+    Name         = "Spin Speed",
+    Range        = {1, 60},
+    Increment    = 1,
+    Suffix       = "deg/frame",
+    CurrentValue = 20,
+    Flag         = "SpinSpeed",
+    Callback     = function(val) spinSpeed = val end,
+})
+
+-- ================================================
+--  Auto Clicker
+--  Simulates rapid mouse clicks for fast attacks.
+-- ================================================
+CombatTab:CreateSection("Auto Clicker")
+
+local autoClickConn = nil
+local clickCPS      = 10
+
+CombatTab:CreateToggle({
+    Name         = "Auto Clicker",
+    CurrentValue = false,
+    Flag         = "AutoClicker",
+    Callback     = function(val)
+        if val then
+            autoClickConn = task.spawn(function()
+                while combatEnabled and val do
+                    mouse1click()
+                    task.wait(1 / clickCPS)
+                end
+            end)
+            Rayfield:Notify({Title="Combat", Content="Auto Clicker ON", Duration=2})
+        else
+            if autoClickConn then
+                task.cancel(autoClickConn)
+                autoClickConn = nil
+            end
+            Rayfield:Notify({Title="Combat", Content="Auto Clicker OFF", Duration=2})
+        end
+    end,
+})
+
+CombatTab:CreateSlider({
+    Name         = "Clicks Per Second",
+    Range        = {1, 30},
+    Increment    = 1,
+    Suffix       = "cps",
+    CurrentValue = 10,
+    Flag         = "AutoClickCPS",
+    Callback     = function(val) clickCPS = val end,
+})
+
+-- ================================================
+--  Team Check  (global toggle for all combat)
+--  When ON, all combat features skip teammates.
+-- ================================================
+CombatTab:CreateSection("Settings")
+
+CombatTab:CreateToggle({
+    Name         = "Team Check  (skip teammates)",
+    CurrentValue = false,
+    Flag         = "TeamCheck",
+    Callback     = function(val)
+        _G.CombatTeamCheck = val
+        Rayfield:Notify({
+            Title   = "Combat",
+            Content = val and "Team Check ON — teammates ignored" or "Team Check OFF",
+            Duration = 2
+        })
+    end,
+})
+
+-- Patch getNearestTarget to respect team check
+local _origGetNearest = getNearestTarget
+getNearestTarget = function()
+    if not _G.CombatTeamCheck then return _origGetNearest() end
+    local cam    = workspace.CurrentCamera
+    local best, bestDist = nil, math.huge
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= lp and p.Team ~= lp.Team and p.Character then
+            local root = p.Character:FindFirstChild("HumanoidRootPart")
+            local h    = p.Character:FindFirstChildOfClass("Humanoid")
+            if root and h and h.Health > 0 then
+                local screenPos, onScreen = cam:WorldToViewportPoint(root.Position)
+                if onScreen then
+                    local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
+                    local dist2D = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+                    if dist2D < aimbotFOV and dist2D < bestDist then
+                        bestDist = dist2D
+                        best     = root
+                    end
+                end
+            end
+        end
+    end
+    return best
+end
 
 -- ================================================
 --              LOAD SAVED CONFIG
