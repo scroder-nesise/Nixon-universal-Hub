@@ -1,0 +1,619 @@
+-- ================================================
+--       Nixon Studios | Universal Hub  V1.0
+--          Built with Rayfield UI Library
+-- ================================================
+
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+    Name           = "Nixon Studios | Universal Hub",
+    LoadingTitle   = "Nixon Studios",
+    LoadingSubtitle = "Universal Hub V1.0",
+    ConfigurationSaving = {
+        Enabled    = true,
+        FolderName = "NixonStudios",
+        FileName   = "UniversalHub"
+    },
+    Discord    = { Enabled = false },
+    KeySystem  = false,
+})
+
+-- ================================================
+--                    SERVICES
+-- ================================================
+local Players          = game:GetService("Players")
+local RunService       = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TeleportService  = game:GetService("TeleportService")
+local Lighting         = game:GetService("Lighting")
+local VirtualUser      = game:GetService("VirtualUser")
+local Debris           = game:GetService("Debris")
+
+local lp   = Players.LocalPlayer
+local char = lp.Character or lp.CharacterAdded:Wait()
+local hum  = char:WaitForChild("Humanoid")
+
+lp.CharacterAdded:Connect(function(c)
+    char = c
+    hum  = c:WaitForChild("Humanoid")
+end)
+
+-- ================================================
+--                   MAIN TAB
+-- ================================================
+local MainTab = Window:CreateTab("Main", "home")
+
+-- >> Movement
+MainTab:CreateSection("Movement")
+
+MainTab:CreateSlider({
+    Name         = "Walk Speed",
+    Range        = {0, 500},
+    Increment    = 1,
+    Suffix       = "studs/s",
+    CurrentValue = 16,
+    Flag         = "WalkSpeed",
+    Callback     = function(val)
+        if hum then hum.WalkSpeed = val end
+    end,
+})
+
+MainTab:CreateSlider({
+    Name         = "Jump Power",
+    Range        = {0, 500},
+    Increment    = 1,
+    Suffix       = "power",
+    CurrentValue = 50,
+    Flag         = "JumpPower",
+    Callback     = function(val)
+        if hum then hum.JumpPower = val end
+    end,
+})
+
+MainTab:CreateToggle({
+    Name         = "Infinite Jump",
+    CurrentValue = false,
+    Flag         = "InfiniteJump",
+    Callback     = function(val) _G.InfiniteJump = val end,
+})
+
+UserInputService.JumpRequest:Connect(function()
+    if _G.InfiniteJump then
+        local h = char and char:FindFirstChildOfClass("Humanoid")
+        if h then h:ChangeState(Enum.HumanoidStateType.Jumping) end
+    end
+end)
+
+MainTab:CreateToggle({
+    Name         = "Noclip",
+    CurrentValue = false,
+    Flag         = "Noclip",
+    Callback     = function(val) _G.Noclip = val end,
+})
+
+RunService.Stepped:Connect(function()
+    if _G.Noclip and char then
+        for _, v in pairs(char:GetDescendants()) do
+            if v:IsA("BasePart") then v.CanCollide = false end
+        end
+    end
+end)
+
+MainTab:CreateToggle({
+    Name         = "Anti-Ragdoll",
+    CurrentValue = false,
+    Flag         = "AntiRagdoll",
+    Callback     = function(val)
+        if hum then
+            hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll,     not val)
+            hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, not val)
+        end
+    end,
+})
+
+-- >> Camera
+MainTab:CreateSection("Camera")
+
+local camMode = "Third"
+MainTab:CreateButton({
+    Name     = "Toggle First / Third Person",
+    Callback = function()
+        if camMode == "Third" then
+            lp.CameraMaxZoomDistance = 0
+            lp.CameraMinZoomDistance = 0
+            camMode = "First"
+            Rayfield:Notify({Title="Camera", Content="Switched to First Person", Duration=2})
+        else
+            lp.CameraMaxZoomDistance = 128
+            lp.CameraMinZoomDistance = 0.5
+            workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
+            camMode = "Third"
+            Rayfield:Notify({Title="Camera", Content="Switched to Third Person", Duration=2})
+        end
+    end,
+})
+
+MainTab:CreateSlider({
+    Name         = "Field of View",
+    Range        = {30, 120},
+    Increment    = 1,
+    Suffix       = "fov",
+    CurrentValue = 70,
+    Flag         = "CameraFOV",
+    Callback     = function(val)
+        workspace.CurrentCamera.FieldOfView = val
+    end,
+})
+
+-- >> Misc
+MainTab:CreateSection("Misc")
+
+_G.AntiAFKEnabled = true
+MainTab:CreateToggle({
+    Name         = "Anti-AFK",
+    CurrentValue = true,
+    Flag         = "AntiAFK",
+    Callback     = function(val) _G.AntiAFKEnabled = val end,
+})
+
+lp.Idled:Connect(function()
+    if _G.AntiAFKEnabled then
+        VirtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+        task.wait(1)
+        VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+    end
+end)
+
+MainTab:CreateToggle({
+    Name         = "Disable Animations",
+    CurrentValue = false,
+    Flag         = "DisableAnims",
+    Callback     = function(val)
+        local animator = hum and hum:FindFirstChildOfClass("Animator")
+        if animator then
+            for _, track in pairs(animator:GetPlayingAnimationTracks()) do
+                if val then track:Stop() else track:Play() end
+            end
+        end
+    end,
+})
+
+-- ================================================
+--                  SCRIPTS TAB
+-- ================================================
+local ScriptsTab = Window:CreateTab("Scripts", "terminal")
+
+-- helper: safe loadstring with notify feedback
+local function safeLoad(url, label)
+    local ok, err = pcall(function()
+        loadstring(game:HttpGet(url, true))()
+    end)
+    if ok then
+        Rayfield:Notify({Title="Scripts", Content=label.." loaded!", Duration=3})
+    else
+        Rayfield:Notify({Title="Scripts Error", Content=label.." failed: "..tostring(err), Duration=5})
+    end
+end
+
+-- >> Movement
+ScriptsTab:CreateSection("Movement")
+
+ScriptsTab:CreateButton({
+    Name     = "Fly GUI V1.5  (Nixon Studios)",
+    Callback = function() safeLoad(
+        "https://raw.githubusercontent.com/scroder-nesise/Fly-GUI-Roblox/refs/heads/main/fly",
+        "Fly GUI V1.5")
+    end,
+})
+
+-- >> Admin Scripts
+ScriptsTab:CreateSection("Admin Scripts")
+
+ScriptsTab:CreateButton({
+    Name     = "Infinite Yield",
+    Callback = function() safeLoad(
+        "https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source",
+        "Infinite Yield")
+    end,
+})
+
+ScriptsTab:CreateButton({
+    Name     = "Nameless Admin  (~300+ cmds)",
+    Callback = function() safeLoad(
+        "https://raw.githubusercontent.com/FilteringEnabled/NamelessAdmin/main/Source",
+        "Nameless Admin")
+    end,
+})
+
+ScriptsTab:CreateButton({
+    Name     = "Fate's Admin",
+    Callback = function() safeLoad(
+        "https://raw.githubusercontent.com/fatesc/fates-admin/main/main.lua",
+        "Fate's Admin")
+    end,
+})
+
+ScriptsTab:CreateButton({
+    Name     = "CMD-X  (Lightweight)",
+    Callback = function() safeLoad(
+        "https://raw.githubusercontent.com/CMD-X/CMD-X/master/Source",
+        "CMD-X")
+    end,
+})
+
+ScriptsTab:CreateButton({
+    Name     = "Leg Admin v2",
+    Callback = function() safeLoad(
+        "https://raw.githubusercontent.com/leg1337/legadmv2/main/legadminv2.lua",
+        "Leg Admin v2")
+    end,
+})
+
+ScriptsTab:CreateButton({
+    Name     = "Homebrew Admin",
+    Callback = function() safeLoad(
+        "https://raw.githubusercontent.com/Syntaxx64/HomebrewAdmin/master/Main",
+        "Homebrew Admin")
+    end,
+})
+
+-- >> Developer Tools
+ScriptsTab:CreateSection("Developer Tools")
+
+ScriptsTab:CreateButton({
+    Name     = "Dex Explorer  (Moon)",
+    Callback = function() safeLoad(
+        "https://raw.githubusercontent.com/depso/dex/main/Dex3.lua",
+        "Dex Explorer")
+    end,
+})
+
+ScriptsTab:CreateButton({
+    Name     = "SimpleSpy  (Remote Logger)",
+    Callback = function() safeLoad(
+        "https://raw.githubusercontent.com/78n/SimpleSpy/main/SimpleSpyBeta.lua",
+        "SimpleSpy")
+    end,
+})
+
+ScriptsTab:CreateButton({
+    Name     = "Remote Spy  (richie0866)",
+    Callback = function() safeLoad(
+        "https://github.com/richie0866/remote-spy/releases/latest/download/RemoteSpy.lua",
+        "Remote Spy")
+    end,
+})
+
+ScriptsTab:CreateButton({
+    Name     = "Utopia Spy",
+    Callback = function() safeLoad(
+        "https://raw.githubusercontent.com/Klinac/scripts/main/utopia_spy.lua",
+        "Utopia Spy")
+    end,
+})
+
+-- >> Utilities
+ScriptsTab:CreateSection("Utilities")
+
+ScriptsTab:CreateButton({
+    Name     = "PHANTOM FPS Booster  (Nixon Studios)",
+    Callback = function() safeLoad(
+        "https://raw.githubusercontent.com/scroder-nesise/FPS-Booster-Roblox/refs/heads/main/FPS%20Booster",
+        "PHANTOM FPS Booster")
+    end,
+})
+
+-- ================================================
+--                  VISUAL TAB
+-- ================================================
+local VisualTab = Window:CreateTab("Visual", "eye")
+
+-- >> Lighting
+VisualTab:CreateSection("Lighting")
+
+VisualTab:CreateToggle({
+    Name         = "Fullbright",
+    CurrentValue = false,
+    Flag         = "Fullbright",
+    Callback     = function(val)
+        Lighting.Brightness    = val and 2       or 1
+        Lighting.FogEnd        = val and 100000  or 1000
+        Lighting.GlobalShadows = not val
+        Lighting.Ambient       = val
+            and Color3.fromRGB(178, 178, 178)
+            or  Color3.fromRGB(70,  70,  70)
+    end,
+})
+
+VisualTab:CreateToggle({
+    Name         = "Remove Fog",
+    CurrentValue = false,
+    Flag         = "RemoveFog",
+    Callback     = function(val)
+        Lighting.FogEnd   = val and 100000 or 1000
+        Lighting.FogStart = val and 99999  or 0
+    end,
+})
+
+VisualTab:CreateSlider({
+    Name         = "Time of Day",
+    Range        = {0, 24},
+    Increment    = 1,
+    Suffix       = ":00",
+    CurrentValue = 14,
+    Flag         = "TimeOfDay",
+    Callback     = function(val)
+        Lighting.ClockTime = val
+    end,
+})
+
+-- >> ESP
+VisualTab:CreateSection("ESP")
+
+local espEnabled = false
+local chamEnabled = false
+local espFolder  = Instance.new("Folder")
+espFolder.Name   = "NixonESP"
+espFolder.Parent = game:GetService("CoreGui")
+
+local function makeHighlight(player, fillCol, outlineCol, fillAlpha, outlineAlpha)
+    if player == lp then return end
+    local function build()
+        local c = player.Character
+        if not c then return end
+        local old = espFolder:FindFirstChild(player.Name)
+        if old then old:Destroy() end
+        local hl                   = Instance.new("Highlight")
+        hl.Name                    = player.Name
+        hl.Adornee                 = c
+        hl.FillColor               = fillCol    or Color3.fromRGB(255, 50, 50)
+        hl.OutlineColor            = outlineCol or Color3.fromRGB(255, 255, 255)
+        hl.FillTransparency        = fillAlpha    ~= nil and fillAlpha    or 0.5
+        hl.OutlineTransparency     = outlineAlpha ~= nil and outlineAlpha or 0
+        hl.DepthMode               = Enum.HighlightDepthMode.AlwaysOnTop
+        hl.Parent                  = espFolder
+    end
+    build()
+    player.CharacterAdded:Connect(function()
+        if espEnabled or chamEnabled then build() end
+    end)
+end
+
+VisualTab:CreateToggle({
+    Name         = "Player ESP",
+    CurrentValue = false,
+    Flag         = "PlayerESP",
+    Callback     = function(val)
+        espEnabled = val
+        espFolder:ClearAllChildren()
+        if val then
+            for _, p in pairs(Players:GetPlayers()) do
+                makeHighlight(p, Color3.fromRGB(255,50,50), Color3.fromRGB(255,255,255), 0.5, 0)
+            end
+            Players.PlayerAdded:Connect(function(p)
+                if espEnabled then
+                    makeHighlight(p, Color3.fromRGB(255,50,50), Color3.fromRGB(255,255,255), 0.5, 0)
+                end
+            end)
+        end
+    end,
+})
+
+VisualTab:CreateToggle({
+    Name         = "Chams  (Outline Only)",
+    CurrentValue = false,
+    Flag         = "Chams",
+    Callback     = function(val)
+        chamEnabled = val
+        espFolder:ClearAllChildren()
+        if val then
+            for _, p in pairs(Players:GetPlayers()) do
+                makeHighlight(p, Color3.fromRGB(0,255,200), Color3.fromRGB(0,255,200), 1, 0)
+            end
+        end
+    end,
+})
+
+-- ================================================
+--                  PLAYER TAB
+-- ================================================
+local PlayerTab = Window:CreateTab("Player", "user")
+
+PlayerTab:CreateSection("Character")
+
+PlayerTab:CreateToggle({
+    Name         = "Invisible",
+    CurrentValue = false,
+    Flag         = "Invisible",
+    Callback     = function(val)
+        for _, v in pairs(char:GetDescendants()) do
+            if v:IsA("BasePart") and v.Name ~= "HumanoidRootPart" then
+                v.Transparency = val and 1 or 0
+            elseif v:IsA("Decal") then
+                v.Transparency = val and 1 or 0
+            end
+        end
+    end,
+})
+
+PlayerTab:CreateToggle({
+    Name         = "Freeze Character",
+    CurrentValue = false,
+    Flag         = "Freeze",
+    Callback     = function(val)
+        local root = char:FindFirstChild("HumanoidRootPart")
+        if root then root.Anchored = val end
+    end,
+})
+
+PlayerTab:CreateButton({
+    Name     = "Fling Self",
+    Callback = function()
+        local root = char:FindFirstChild("HumanoidRootPart")
+        if root then
+            local bv    = Instance.new("BodyVelocity", root)
+            bv.Velocity = Vector3.new(math.random(-200,200), 500, math.random(-200,200))
+            bv.MaxForce = Vector3.new(1,1,1) * 999999
+            Debris:AddItem(bv, 0.2)
+        end
+    end,
+})
+
+PlayerTab:CreateButton({
+    Name     = "Reset Character",
+    Callback = function()
+        if hum then hum.Health = 0 end
+        Rayfield:Notify({Title="Player", Content="Character reset!", Duration=2})
+    end,
+})
+
+-- >> Position
+PlayerTab:CreateSection("Position")
+
+local savedPos = nil
+
+PlayerTab:CreateButton({
+    Name     = "Save Current Position",
+    Callback = function()
+        local root = char:FindFirstChild("HumanoidRootPart")
+        if root then
+            savedPos = root.CFrame
+            Rayfield:Notify({Title="Player", Content="Position saved!", Duration=2})
+        end
+    end,
+})
+
+PlayerTab:CreateButton({
+    Name     = "Return to Saved Position",
+    Callback = function()
+        if savedPos then
+            local root = char:FindFirstChild("HumanoidRootPart")
+            if root then
+                root.CFrame = savedPos
+                Rayfield:Notify({Title="Player", Content="Teleported to saved position!", Duration=2})
+            end
+        else
+            Rayfield:Notify({Title="Player", Content="No position saved yet!", Duration=2})
+        end
+    end,
+})
+
+-- >> Teleport to Player
+PlayerTab:CreateSection("Teleport to Player")
+
+local selectedTarget = "None"
+
+-- build a refreshed player list every time the button is pressed
+PlayerTab:CreateButton({
+    Name     = "Refresh Player List",
+    Callback = function()
+        local names = {}
+        for _, p in pairs(Players:GetPlayers()) do
+            if p ~= lp then table.insert(names, p.Name) end
+        end
+        local display = #names > 0 and table.concat(names, ", ") or "No other players"
+        Rayfield:Notify({Title="Player List", Content=display, Duration=6})
+    end,
+})
+
+PlayerTab:CreateInput({
+    Name        = "Type Player Name",
+    PlaceholderText = "Enter exact username...",
+    RemoveTextAfterFocusLost = false,
+    Flag        = "TeleportTargetInput",
+    Callback    = function(val)
+        selectedTarget = val
+    end,
+})
+
+PlayerTab:CreateButton({
+    Name     = "Teleport to Player",
+    Callback = function()
+        if selectedTarget == "" or selectedTarget == "None" then
+            Rayfield:Notify({Title="Player", Content="Type a player name first!", Duration=2})
+            return
+        end
+        local target = Players:FindFirstChild(selectedTarget)
+        if target and target.Character then
+            local tRoot = target.Character:FindFirstChild("HumanoidRootPart")
+            local myRoot = char:FindFirstChild("HumanoidRootPart")
+            if tRoot and myRoot then
+                myRoot.CFrame = tRoot.CFrame + Vector3.new(3, 0, 0)
+                Rayfield:Notify({Title="Player", Content="Teleported to "..selectedTarget, Duration=2})
+            end
+        else
+            Rayfield:Notify({Title="Player", Content="Player '"..selectedTarget.."' not found.", Duration=3})
+        end
+    end,
+})
+
+-- ================================================
+--                  SERVER TAB
+-- ================================================
+local ServerTab = Window:CreateTab("Server", "globe")
+
+ServerTab:CreateSection("Navigation")
+
+ServerTab:CreateButton({
+    Name     = "Server Hop",
+    Callback = function()
+        Rayfield:Notify({Title="Server", Content="Hopping to a new server...", Duration=3})
+        TeleportService:Teleport(game.PlaceId, lp)
+    end,
+})
+
+ServerTab:CreateButton({
+    Name     = "Rejoin",
+    Callback = function()
+        Rayfield:Notify({Title="Server", Content="Rejoining...", Duration=2})
+        TeleportService:Teleport(game.PlaceId, lp)
+    end,
+})
+
+ServerTab:CreateButton({
+    Name     = "Copy Job ID",
+    Callback = function()
+        if setclipboard then
+            setclipboard(game.JobId)
+            Rayfield:Notify({Title="Server", Content="Job ID copied to clipboard!", Duration=2})
+        else
+            Rayfield:Notify({Title="Server", Content="Clipboard not supported on this executor.", Duration=3})
+        end
+    end,
+})
+
+ServerTab:CreateSection("Info")
+
+ServerTab:CreateButton({
+    Name     = "List All Players",
+    Callback = function()
+        local list = {}
+        for _, p in pairs(Players:GetPlayers()) do
+            table.insert(list, p.Name)
+        end
+        Rayfield:Notify({
+            Title    = "Players ("..#list..")",
+            Content  = table.concat(list, ", "),
+            Duration = 7
+        })
+    end,
+})
+
+ServerTab:CreateButton({
+    Name     = "Server Info",
+    Callback = function()
+        local info = string.format(
+            "Game: %s | Players: %d/%d | PlaceId: %d",
+            game.Name,
+            #Players:GetPlayers(),
+            Players.MaxPlayers,
+            game.PlaceId
+        )
+        Rayfield:Notify({Title="Server Info", Content=info, Duration=7})
+    end,
+})
+
+-- ================================================
+--              LOAD SAVED CONFIG
+-- ================================================
+Rayfield:LoadConfiguration()
