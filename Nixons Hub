@@ -1,5 +1,5 @@
 -- ================================================
---       Nixon Studios | Universal Hub  V1.1
+--       Nixon Studios | Universal Hub  V1.2
 --          Built with Rayfield UI Library
 -- ================================================
 
@@ -8,7 +8,7 @@ local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Window = Rayfield:CreateWindow({
     Name           = "Nixon Studios | Universal Hub",
     LoadingTitle   = "Nixon Studios",
-    LoadingSubtitle = "Universal Hub V1.1",
+    LoadingSubtitle = "Universal Hub V1.2",
     ConfigurationSaving = {
         Enabled    = true,
         FolderName = "NixonStudios",
@@ -292,6 +292,41 @@ ScriptsTab:CreateButton({
     end,
 })
 
+ScriptsTab:CreateButton({
+    Name     = "Hydroxide  (Game Debugger)",
+    Callback = function() safeLoad(
+        "https://raw.githubusercontent.com/Upbolt/Hydroxide/main/src/init.lua",
+        "Hydroxide")
+    end,
+})
+
+-- >> More Scripts
+ScriptsTab:CreateSection("More Scripts")
+
+ScriptsTab:CreateButton({
+    Name     = "Vynixu Admin FE",
+    Callback = function() safeLoad(
+        "https://raw.githubusercontent.com/vynixu/vynixuAdmin/main/vynixuadminFE.lua",
+        "Vynixu Admin FE")
+    end,
+})
+
+ScriptsTab:CreateButton({
+    Name     = "AK Admin",
+    Callback = function() safeLoad(
+        "https://raw.githubusercontent.com/akscripts/AK-Admin/main/source.lua",
+        "AK Admin")
+    end,
+})
+
+ScriptsTab:CreateButton({
+    Name     = "Reviz Admin  (Versatile)",
+    Callback = function() safeLoad(
+        "https://raw.githubusercontent.com/richie0866/Reviz-Admin/master/Reviz%20Admin.lua",
+        "Reviz Admin")
+    end,
+})
+
 -- >> Utilities
 ScriptsTab:CreateSection("Utilities")
 
@@ -414,6 +449,103 @@ VisualTab:CreateToggle({
     end,
 })
 
+-- >> World Effects
+VisualTab:CreateSection("World Effects")
+
+-- Invert Colors via ColorCorrectionEffect + ScreenGui overlay
+-- TintColor MULTIPLIES color values, so (0,0,0) = pure black (the old bug).
+-- We keep TintColor white and use Brightness/Contrast/Saturation instead.
+local invertEffect = Instance.new("ColorCorrectionEffect")
+invertEffect.Name      = "NixonInvert"
+invertEffect.Enabled   = false
+invertEffect.Parent    = Lighting
+
+-- Overlay frame to push whites toward dark (helps the inversion look)
+local invertGui   = Instance.new("ScreenGui")
+invertGui.Name    = "NixonInvertGui"
+invertGui.ResetOnSpawn = false
+invertGui.Enabled = false
+invertGui.Parent  = game:GetService("CoreGui")
+local invertFrame = Instance.new("Frame", invertGui)
+invertFrame.Size  = UDim2.new(1, 0, 1, 0)
+invertFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+invertFrame.BackgroundTransparency = 0.85
+invertFrame.BorderSizePixel = 0
+
+VisualTab:CreateToggle({
+    Name         = "Invert Colors",
+    CurrentValue = false,
+    Flag         = "InvertColors",
+    Callback     = function(val)
+        invertEffect.Enabled    = val
+        invertEffect.TintColor  = Color3.fromRGB(255, 255, 255) -- NEVER set to black
+        invertEffect.Brightness  = val and -0.45 or 0
+        invertEffect.Contrast    = val and -0.6  or 0
+        invertEffect.Saturation  = val and -1    or 0
+        -- Lighting shifts to make darks lighter and brights darker
+        if val then
+            Lighting.Brightness        = 3
+            Lighting.GlobalShadows     = false
+            Lighting.Ambient           = Color3.fromRGB(200, 200, 200)
+            Lighting.OutdoorAmbient    = Color3.fromRGB(200, 200, 200)
+        else
+            Lighting.Brightness        = 1
+            Lighting.GlobalShadows     = true
+            Lighting.Ambient           = Color3.fromRGB(70, 70, 70)
+            Lighting.OutdoorAmbient    = Color3.fromRGB(128, 128, 128)
+        end
+        invertGui.Enabled = val
+        Rayfield:Notify({Title="Visual", Content= val and "Invert Colors ON" or "Invert Colors OFF", Duration=2})
+    end,
+})
+
+-- Rainbow Sky
+local rainbowSkyConn = nil
+local rainbowHue     = 0
+
+VisualTab:CreateToggle({
+    Name         = "Rainbow Sky",
+    CurrentValue = false,
+    Flag         = "RainbowSky",
+    Callback     = function(val)
+        if val then
+            -- Remove any existing sky first
+            local old = Lighting:FindFirstChildOfClass("Sky")
+            if old then old:Destroy() end
+            local sky = Instance.new("Sky", Lighting)
+            sky.Name  = "NixonRainbowSky"
+            rainbowSkyConn = RunService.Heartbeat:Connect(function(dt)
+                rainbowHue = (rainbowHue + dt * 0.05) % 1
+                local col  = Color3.fromHSV(rainbowHue, 0.8, 1)
+                Lighting.Ambient    = col
+                Lighting.OutdoorAmbient = col
+                Lighting.FogColor   = col
+            end)
+            Rayfield:Notify({Title="Visual", Content="Rainbow Sky ON", Duration=2})
+        else
+            if rainbowSkyConn then rainbowSkyConn:Disconnect() rainbowSkyConn = nil end
+            local s = Lighting:FindFirstChild("NixonRainbowSky")
+            if s then s:Destroy() end
+            Lighting.Ambient        = Color3.fromRGB(70,  70,  70)
+            Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128)
+            Lighting.FogColor       = Color3.fromRGB(192, 192, 192)
+            Rayfield:Notify({Title="Visual", Content="Rainbow Sky OFF", Duration=2})
+        end
+    end,
+})
+
+-- Custom Sky Color
+VisualTab:CreateColorPicker({
+    Name         = "Custom Sky / Ambient Color",
+    Color        = Color3.fromRGB(70, 70, 70),
+    Flag         = "SkyColor",
+    Callback     = function(col)
+        Lighting.Ambient        = col
+        Lighting.OutdoorAmbient = col
+        Lighting.FogColor       = col
+    end,
+})
+
 -- ================================================
 --                  PLAYER TAB
 -- ================================================
@@ -421,18 +553,44 @@ local PlayerTab = Window:CreateTab("Player", "user")
 
 PlayerTab:CreateSection("Character")
 
+-- Local-only self highlight so YOU see yourself while others see nothing
+local selfHighlight = Instance.new("Highlight")
+selfHighlight.Name               = "NixonSelfHL"
+selfHighlight.FillColor          = Color3.fromRGB(150, 200, 255)
+selfHighlight.OutlineColor       = Color3.fromRGB(0, 170, 255)
+selfHighlight.FillTransparency   = 0.6   -- 40% opacity body fill
+selfHighlight.OutlineTransparency = 0    -- solid outline
+selfHighlight.DepthMode          = Enum.HighlightDepthMode.AlwaysOnTop
+selfHighlight.Enabled            = false
+selfHighlight.Parent             = game:GetService("CoreGui") -- local only, not replicated
+
+lp.CharacterAdded:Connect(function(c)
+    selfHighlight.Adornee = c
+end)
+
 PlayerTab:CreateToggle({
     Name         = "Invisible",
     CurrentValue = false,
     Flag         = "Invisible",
     Callback     = function(val)
+        -- Transparency = 1 replicates to server → others see you invisible
+        -- LocalTransparencyModifier is a local-only override
         for _, v in pairs(char:GetDescendants()) do
             if v:IsA("BasePart") and v.Name ~= "HumanoidRootPart" then
-                v.Transparency = val and 1 or 0
+                v.Transparency              = val and 1 or 0
+                v.LocalTransparencyModifier = val and 0.4 or 0
             elseif v:IsA("Decal") then
                 v.Transparency = val and 1 or 0
             end
         end
+        -- CoreGui highlight = only YOU see yourself outlined at low opacity
+        selfHighlight.Adornee = char
+        selfHighlight.Enabled = val
+        Rayfield:Notify({
+            Title   = "Player",
+            Content = val and "Invisible ON  (you see yourself faintly)" or "Invisible OFF",
+            Duration = 2
+        })
     end,
 })
 
@@ -543,6 +701,105 @@ PlayerTab:CreateButton({
             end
         else
             Rayfield:Notify({Title="Player", Content="Player '"..selectedTarget.."' not found.", Duration=3})
+        end
+    end,
+})
+
+-- >> Physics
+PlayerTab:CreateSection("Physics")
+
+PlayerTab:CreateSlider({
+    Name         = "Gravity",
+    Range        = {0, 500},
+    Increment    = 5,
+    Suffix       = "studs/s²",
+    CurrentValue = 196,
+    Flag         = "Gravity",
+    Callback     = function(val)
+        workspace.Gravity = val
+    end,
+})
+
+PlayerTab:CreateButton({
+    Name     = "Reset Gravity",
+    Callback = function()
+        workspace.Gravity = 196.2
+        Rayfield:Notify({Title="Player", Content="Gravity reset to default (196.2)", Duration=2})
+    end,
+})
+
+-- >> R15 Animations
+PlayerTab:CreateSection("R15 Animations  (Official Roblox)")
+
+-- Official Roblox R15 animation IDs
+local r15Animations = {
+    ["Idle"]         = 507766388,
+    ["Walk"]         = 507777826,
+    ["Run"]          = 507767714,
+    ["Jump"]         = 507765000,
+    ["Fall"]         = 507767968,
+    ["Climb"]        = 507765644,
+    ["Swim"]         = 507784897,
+    ["Dance 1"]      = 507771019,
+    ["Dance 2"]      = 507776043,
+    ["Dance 3"]      = 507777268,
+    ["Wave"]         = 507770239,
+    ["Point"]        = 507770453,
+    ["Cheer"]        = 507770677,
+    ["Laugh"]        = 507770818,
+    ["Sit"]          = 2506281703,
+    ["Emote (Tilt)"] = 3360686498,
+}
+
+local selectedAnim = nil
+
+PlayerTab:CreateDropdown({
+    Name           = "Select Animation",
+    Options        = (function()
+        local list = {}
+        for k in pairs(r15Animations) do table.insert(list, k) end
+        table.sort(list)
+        return list
+    end)(),
+    CurrentOption  = {"Idle"},
+    MultipleOptions = false,
+    Flag           = "R15AnimPick",
+    Callback       = function(val)
+        selectedAnim = type(val) == "table" and val[1] or val
+    end,
+})
+
+PlayerTab:CreateButton({
+    Name     = "Play Selected Animation",
+    Callback = function()
+        if not selectedAnim then
+            Rayfield:Notify({Title="Player", Content="Pick an animation first!", Duration=2})
+            return
+        end
+        local animId = r15Animations[selectedAnim]
+        if not animId then return end
+        local animator = hum and hum:FindFirstChildOfClass("Animator")
+        if not animator then
+            Rayfield:Notify({Title="Player", Content="No Animator found (are you R15?)", Duration=3})
+            return
+        end
+        local anim = Instance.new("Animation")
+        anim.AnimationId = "rbxassetid://" .. animId
+        local track = animator:LoadAnimation(anim)
+        track:Play()
+        Rayfield:Notify({Title="Player", Content="Playing: "..selectedAnim, Duration=2})
+    end,
+})
+
+PlayerTab:CreateButton({
+    Name     = "Stop All Animations",
+    Callback = function()
+        local animator = hum and hum:FindFirstChildOfClass("Animator")
+        if animator then
+            for _, track in pairs(animator:GetPlayingAnimationTracks()) do
+                track:Stop()
+            end
+            Rayfield:Notify({Title="Player", Content="All animations stopped.", Duration=2})
         end
     end,
 })
@@ -1164,27 +1421,24 @@ CombatTab:CreateSlider({
 -- ================================================
 CombatTab:CreateSection("Auto Clicker")
 
-local autoClickConn = nil
-local clickCPS      = 10
+local autoClickRunning = false
+local clickCPS         = 10
 
 CombatTab:CreateToggle({
     Name         = "Auto Clicker",
     CurrentValue = false,
     Flag         = "AutoClicker",
     Callback     = function(val)
+        autoClickRunning = val
         if val then
-            autoClickConn = task.spawn(function()
-                while combatEnabled and val do
-                    mouse1click()
+            task.spawn(function()
+                while autoClickRunning do
+                    pcall(mouse1click)
                     task.wait(1 / clickCPS)
                 end
             end)
             Rayfield:Notify({Title="Combat", Content="Auto Clicker ON", Duration=2})
         else
-            if autoClickConn then
-                task.cancel(autoClickConn)
-                autoClickConn = nil
-            end
             Rayfield:Notify({Title="Combat", Content="Auto Clicker OFF", Duration=2})
         end
     end,
@@ -1245,6 +1499,422 @@ getNearestTarget = function()
     end
     return best
 end
+
+-- ================================================
+--                  EXTRAS TAB
+-- ================================================
+local ExtrasTab = Window:CreateTab("Extras", "monitor")
+
+-- ================================================
+--  FPS Counter
+--  Draws a live FPS label using the Drawing API.
+-- ================================================
+ExtrasTab:CreateSection("FPS Counter")
+
+local fpsLabel    = nil
+local fpsConn     = nil
+local fpsFrames   = 0
+local fpsElapsed  = 0
+local fpsColor    = Color3.fromRGB(0, 255, 100)
+
+local function removeFpsLabel()
+    if fpsLabel then fpsLabel:Remove() fpsLabel = nil end
+    if fpsConn  then fpsConn:Disconnect() fpsConn = nil end
+end
+
+ExtrasTab:CreateToggle({
+    Name         = "FPS Counter",
+    CurrentValue = false,
+    Flag         = "FPSCounter",
+    Callback     = function(val)
+        if val then
+            fpsLabel          = Drawing.new("Text")
+            fpsLabel.Size     = 18
+            fpsLabel.Font     = Drawing.Fonts.Monospace
+            fpsLabel.Color    = fpsColor
+            fpsLabel.Outline  = true
+            fpsLabel.Position = Vector2.new(10, 130)
+            fpsLabel.Visible  = true
+            fpsLabel.Text     = "FPS: --"
+            fpsConn = RunService.Heartbeat:Connect(function(dt)
+                fpsFrames  = fpsFrames + 1
+                fpsElapsed = fpsElapsed + dt
+                if fpsElapsed >= 0.5 then
+                    local fps = math.floor(fpsFrames / fpsElapsed)
+                    fpsLabel.Text  = "FPS: " .. fps
+                    fpsLabel.Color = fps >= 50 and Color3.fromRGB(0,255,100)
+                        or fps >= 25 and Color3.fromRGB(255,200,0)
+                        or Color3.fromRGB(255,60,60)
+                    fpsFrames  = 0
+                    fpsElapsed = 0
+                end
+            end)
+        else
+            removeFpsLabel()
+        end
+    end,
+})
+
+ExtrasTab:CreateSlider({
+    Name         = "FPS Counter Size",
+    Range        = {10, 32},
+    Increment    = 1,
+    Suffix       = "px",
+    CurrentValue = 18,
+    Flag         = "FPSCounterSize",
+    Callback     = function(val)
+        if fpsLabel then fpsLabel.Size = val end
+    end,
+})
+
+-- ================================================
+--  Coordinates Display
+--  Shows live X Y Z position on screen.
+-- ================================================
+ExtrasTab:CreateSection("Coordinates Display")
+
+local coordLabel = nil
+local coordConn  = nil
+
+ExtrasTab:CreateToggle({
+    Name         = "Coordinates Display",
+    CurrentValue = false,
+    Flag         = "CoordsDisplay",
+    Callback     = function(val)
+        if val then
+            coordLabel          = Drawing.new("Text")
+            coordLabel.Size     = 16
+            coordLabel.Font     = Drawing.Fonts.Monospace
+            coordLabel.Color    = Color3.fromRGB(255, 255, 255)
+            coordLabel.Outline  = true
+            coordLabel.Visible  = true
+            coordLabel.Position = Vector2.new(10, 155)
+            coordLabel.Text     = "X: 0  Y: 0  Z: 0"
+            coordConn = RunService.Heartbeat:Connect(function()
+                local root = char and char:FindFirstChild("HumanoidRootPart")
+                if root and coordLabel then
+                    local p = root.Position
+                    coordLabel.Text = string.format(
+                        "X: %.1f  Y: %.1f  Z: %.1f",
+                        p.X, p.Y, p.Z
+                    )
+                end
+            end)
+        else
+            if coordLabel then coordLabel:Remove() coordLabel = nil end
+            if coordConn  then coordConn:Disconnect() coordConn = nil end
+        end
+    end,
+})
+
+-- ================================================
+--  Custom Crosshair  (6 styles)
+--  All drawn with the Drawing API, cleaned up
+--  whenever a new style is selected or toggled off.
+-- ================================================
+ExtrasTab:CreateSection("Custom Crosshair")
+
+local crosshairEnabled = false
+local crosshairStyle   = "Cross"
+local crosshairColor   = Color3.fromRGB(255, 255, 255)
+local crosshairSize    = 10
+local crosshairThick   = 1.5
+local crosshairParts   = {}   -- holds all active Drawing objects
+
+local function clearCrosshair()
+    for _, d in pairs(crosshairParts) do
+        pcall(function() d:Remove() end)
+    end
+    crosshairParts = {}
+end
+
+local function newLine(ax, ay, bx, by)
+    local l        = Drawing.new("Line")
+    l.From         = Vector2.new(ax, ay)
+    l.To           = Vector2.new(bx, by)
+    l.Color        = crosshairColor
+    l.Thickness    = crosshairThick
+    l.Transparency = 1
+    l.Visible      = true
+    table.insert(crosshairParts, l)
+    return l
+end
+
+local function newCircle(x, y, r, filled)
+    local c        = Drawing.new("Circle")
+    c.Position     = Vector2.new(x, y)
+    c.Radius       = r
+    c.Color        = crosshairColor
+    c.Thickness    = crosshairThick
+    c.Filled       = filled or false
+    c.Transparency = 1
+    c.Visible      = true
+    table.insert(crosshairParts, c)
+    return c
+end
+
+local function newQuad(ax,ay, bx,by, cx,cy, dx,dy)
+    local q        = Drawing.new("Quad")
+    q.PointA       = Vector2.new(ax, ay)
+    q.PointB       = Vector2.new(bx, by)
+    q.PointC       = Vector2.new(cx, cy)
+    q.PointD       = Vector2.new(dx, dy)
+    q.Color        = crosshairColor
+    q.Thickness    = crosshairThick
+    q.Filled       = false
+    q.Transparency = 1
+    q.Visible      = true
+    table.insert(crosshairParts, q)
+    return q
+end
+
+local function drawCrosshair()
+    clearCrosshair()
+    if not crosshairEnabled then return end
+    local vp = workspace.CurrentCamera.ViewportSize
+    local cx = vp.X / 2
+    local cy = vp.Y / 2
+    local s  = crosshairSize
+    local g  = 4   -- center gap
+
+    if crosshairStyle == "Dot" then
+        -- 1. Dot — filled circle in center
+        newCircle(cx, cy, 3, true)
+
+    elseif crosshairStyle == "Cross" then
+        -- 2. Cross (+) — 4 lines with gap
+        newLine(cx - s, cy,   cx - g, cy  )   -- left
+        newLine(cx + g, cy,   cx + s, cy  )   -- right
+        newLine(cx,     cy-s, cx,     cy-g)   -- top
+        newLine(cx,     cy+g, cx,     cy+s)   -- bottom
+
+    elseif crosshairStyle == "X" then
+        -- 3. X — diagonal lines with gap
+        newLine(cx-s, cy-s, cx-g, cy-g)
+        newLine(cx+g, cy+g, cx+s, cy+s)
+        newLine(cx+s, cy-s, cx+g, cy-g)
+        newLine(cx-g, cy+g, cx-s, cy+s)
+
+    elseif crosshairStyle == "Circle" then
+        -- 4. Circle — open ring
+        newCircle(cx, cy, s, false)
+
+    elseif crosshairStyle == "Square" then
+        -- 5. Square — open box
+        newQuad(cx-s, cy-s,  cx+s, cy-s,  cx+s, cy+s,  cx-s, cy+s)
+
+    elseif crosshairStyle == "Sniper" then
+        -- 6. Sniper — long thin lines with large gap
+        local sg = s * 1.5
+        newLine(cx - s*2, cy, cx - sg, cy)
+        newLine(cx + sg,  cy, cx + s*2, cy)
+        newLine(cx, cy - s*2, cx, cy - sg)
+        newLine(cx, cy + sg,  cx, cy + s*2)
+        newCircle(cx, cy, 2, true)   -- tiny center dot
+    end
+end
+
+-- Redraw on every frame so it follows screen center
+local crosshairConn = nil
+
+local function startCrosshairLoop()
+    if crosshairConn then crosshairConn:Disconnect() end
+    crosshairConn = RunService.Heartbeat:Connect(function()
+        if crosshairEnabled then drawCrosshair() end
+    end)
+end
+
+ExtrasTab:CreateToggle({
+    Name         = "Enable Crosshair",
+    CurrentValue = false,
+    Flag         = "CrosshairEnabled",
+    Callback     = function(val)
+        crosshairEnabled = val
+        if val then
+            startCrosshairLoop()
+            Rayfield:Notify({Title="Extras", Content="Crosshair ON  ("..crosshairStyle..")", Duration=2})
+        else
+            if crosshairConn then crosshairConn:Disconnect() crosshairConn = nil end
+            clearCrosshair()
+        end
+    end,
+})
+
+ExtrasTab:CreateDropdown({
+    Name            = "Crosshair Style",
+    Options         = {"Dot", "Cross", "X", "Circle", "Square", "Sniper"},
+    CurrentOption   = {"Cross"},
+    MultipleOptions = false,
+    Flag            = "CrosshairStyle",
+    Callback        = function(val)
+        crosshairStyle = type(val) == "table" and val[1] or val
+        if crosshairEnabled then drawCrosshair() end
+        Rayfield:Notify({Title="Extras", Content="Crosshair style: "..crosshairStyle, Duration=2})
+    end,
+})
+
+ExtrasTab:CreateColorPicker({
+    Name     = "Crosshair Color",
+    Color    = Color3.fromRGB(255, 255, 255),
+    Flag     = "CrosshairColor",
+    Callback = function(col)
+        crosshairColor = col
+        for _, d in pairs(crosshairParts) do
+            pcall(function() d.Color = col end)
+        end
+    end,
+})
+
+ExtrasTab:CreateSlider({
+    Name         = "Crosshair Size",
+    Range        = {4, 40},
+    Increment    = 1,
+    Suffix       = "px",
+    CurrentValue = 10,
+    Flag         = "CrosshairSize",
+    Callback     = function(val)
+        crosshairSize = val
+        if crosshairEnabled then drawCrosshair() end
+    end,
+})
+
+ExtrasTab:CreateSlider({
+    Name         = "Crosshair Thickness",
+    Range        = {1, 5},
+    Increment    = 1,
+    Suffix       = "px",
+    CurrentValue = 2,
+    Flag         = "CrosshairThick",
+    Callback     = function(val)
+        crosshairThick = val
+        if crosshairEnabled then drawCrosshair() end
+    end,
+})
+
+-- ================================================
+--  Clock Overlay
+--  Shows real-world time (HH:MM:SS) on screen.
+-- ================================================
+ExtrasTab:CreateSection("Clock")
+
+local clockLabel = nil
+local clockConn  = nil
+
+ExtrasTab:CreateToggle({
+    Name         = "Clock Overlay",
+    CurrentValue = false,
+    Flag         = "ClockOverlay",
+    Callback     = function(val)
+        if val then
+            clockLabel              = Drawing.new("Text")
+            clockLabel.Size         = 16
+            clockLabel.Font         = Drawing.Fonts.Monospace
+            clockLabel.Color        = Color3.fromRGB(255, 220, 100)
+            clockLabel.Outline      = true
+            clockLabel.Visible      = true
+            clockLabel.Position     = Vector2.new(10, 180)
+            clockLabel.Text         = "00:00:00"
+            clockConn = RunService.Heartbeat:Connect(function()
+                if not clockLabel then return end
+                local t   = os.date("*t")
+                clockLabel.Text = string.format(
+                    "%02d:%02d:%02d",
+                    t.hour, t.min, t.sec
+                )
+            end)
+        else
+            if clockLabel then clockLabel:Remove() clockLabel = nil end
+            if clockConn  then clockConn:Disconnect() clockConn = nil end
+        end
+    end,
+})
+
+-- ================================================
+--  Speedometer
+--  Shows your current movement speed in studs/s.
+-- ================================================
+ExtrasTab:CreateSection("Speedometer")
+
+local speedLabel = nil
+local speedConn  = nil
+
+ExtrasTab:CreateToggle({
+    Name         = "Speedometer",
+    CurrentValue = false,
+    Flag         = "Speedometer",
+    Callback     = function(val)
+        if val then
+            speedLabel              = Drawing.new("Text")
+            speedLabel.Size         = 16
+            speedLabel.Font         = Drawing.Fonts.Monospace
+            speedLabel.Color        = Color3.fromRGB(100, 220, 255)
+            speedLabel.Outline      = true
+            speedLabel.Visible      = true
+            speedLabel.Position     = Vector2.new(10, 205)
+            speedLabel.Text         = "Speed: 0 studs/s"
+            speedConn = RunService.Heartbeat:Connect(function()
+                local root = char and char:FindFirstChild("HumanoidRootPart")
+                if root and speedLabel then
+                    local vel   = root.AssemblyLinearVelocity
+                    local speed = math.floor(Vector3.new(vel.X, 0, vel.Z).Magnitude)
+                    speedLabel.Text  = "Speed: " .. speed .. " studs/s"
+                    speedLabel.Color = speed > 100
+                        and Color3.fromRGB(255, 100, 100)
+                        or  speed > 30
+                        and Color3.fromRGB(255, 220, 50)
+                        or  Color3.fromRGB(100, 220, 255)
+                end
+            end)
+        else
+            if speedLabel then speedLabel:Remove() speedLabel = nil end
+            if speedConn  then speedConn:Disconnect() speedConn = nil end
+        end
+    end,
+})
+
+-- ================================================
+--  Ping Display
+--  Shows your current network ping in ms.
+-- ================================================
+ExtrasTab:CreateSection("Ping Display")
+
+local pingLabel = nil
+local pingConn  = nil
+
+ExtrasTab:CreateToggle({
+    Name         = "Ping Display",
+    CurrentValue = false,
+    Flag         = "PingDisplay",
+    Callback     = function(val)
+        if val then
+            pingLabel              = Drawing.new("Text")
+            pingLabel.Size         = 16
+            pingLabel.Font         = Drawing.Fonts.Monospace
+            pingLabel.Color        = Color3.fromRGB(180, 255, 180)
+            pingLabel.Outline      = true
+            pingLabel.Visible      = true
+            pingLabel.Position     = Vector2.new(10, 230)
+            pingLabel.Text         = "Ping: --ms"
+            pingConn = RunService.Heartbeat:Connect(function()
+                if not pingLabel then return end
+                local ok, ping = pcall(function()
+                    return math.floor(lp:GetNetworkPing() * 1000)
+                end)
+                if ok then
+                    pingLabel.Text  = "Ping: " .. ping .. "ms"
+                    pingLabel.Color = ping < 80
+                        and Color3.fromRGB(100, 255, 100)
+                        or  ping < 150
+                        and Color3.fromRGB(255, 220, 50)
+                        or  Color3.fromRGB(255, 80, 80)
+                end
+            end)
+        else
+            if pingLabel then pingLabel:Remove() pingLabel = nil end
+            if pingConn  then pingConn:Disconnect() pingConn = nil end
+        end
+    end,
+})
 
 -- ================================================
 --              LOAD SAVED CONFIG
